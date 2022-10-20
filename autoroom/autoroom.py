@@ -2,6 +2,7 @@ from redbot.core import commands
 from discord.utils import get
 from redbot.core import data_manager
 import json
+from pprint import pprint
 
 HELP_MESSAGE = """
     - add channel_id category_id (optional) suffix
@@ -36,31 +37,32 @@ class Saver:
 
 class ChannelListener:
     # data = {
-    # channel_id: {
-    # "channel": channel_name,
-    # "category": category_name,
-    # "table_prefix": table_prefix
-    # }
+    #     guild_id: {
+    #         channel_id: {
+    #             "category": category_id,
+    #             "suffix": channel_suffix
+    #         }
+    #     }
     # }
     data = {}
 
-    def add_channel(self, channel_name, channel, category, channel_suffix):
-        if channel_name in self.data:
+    def add_channel(self, guild_id, channel_id: str, category_id, channel_suffix):
+        if channel_id in self.data[str(guild_id)]:
             return "This channel already used"
         if not channel_suffix:
             channel_suffix = 'room'
         channel_data = {
-            'channel': channel,
-            'category': category,
-            'suffix': channel_suffix
+            "category": category_id,
+            "suffix": channel_suffix
         }
-        self.data[channel_name] = channel_data
+        guild_data = self.data[guild_id]
+        guild_data[channel_id] = channel_data
         Saver.save(self.data)
         return 'Channel added successfully'
 
-    def remove_channel(self, channel_id):
+    def remove_channel(self, guild_id, channel_id):
         try:
-            self.data.pop(channel_id)
+            self.data[guild_id].pop(channel_id)
             Saver.save(self.data)
         except KeyError:
             return "This channel aren't in use"
@@ -75,8 +77,8 @@ class Autoroom(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        for channel_id in (x := self.Listener.data):
-            category = get(member.guild.categories, name=x[channel_id]['category'])
+        for channel_id in (x := self.Listener.data[str(member.guild.id)]):
+            category = get(member.guild.categories, id=int(x[channel_id]['category']))
             if before.channel:
                 if (y := before.channel) in category.channels:
                     if len(y.members) == 0:
@@ -85,7 +87,7 @@ class Autoroom(commands.Cog):
                         break
 
             if after.channel:
-                if after.channel.name == x[channel_id]['channel']:
+                if after.channel.id == int(channel_id):
                     new_channel_name = f"{member.nick if member.nick else member.name}`s {x[channel_id]['suffix']}"
                     new_channel = await member.guild.create_voice_channel(new_channel_name, category=category)
                     await new_channel.edit(reason=None, position=0)
@@ -96,9 +98,9 @@ class Autoroom(commands.Cog):
     @commands.command()
     @commands.is_owner()
     async def autoroom(self, ctx, index, *args):
-        try:
-            channel_id = args[0]
+        # try:
             if index == 'add':
+                channel_id = args[0]
                 category_id = args[1]
                 channel = get(ctx.guild.channels, id=int(channel_id))
                 category = get(ctx.guild.categories, id=int(category_id))
@@ -108,21 +110,31 @@ class Autoroom(commands.Cog):
                     await ctx.channel.send("Category name error")
                 else:
                     new_channel_suffix = ' '.join(str(x) for x in args[2:]) if len(args) > 2 else None
-                    response = self.Listener.add_channel(channel_id, channel.name, category.name, new_channel_suffix)
+                    response = self.Listener.add_channel(str(ctx.guild.id), channel_id, category_id,
+                                                         new_channel_suffix)
                     await ctx.channel.send(f"{response}")
 
             elif index == 'remove':
-                await ctx.channel.send(self.Listener.remove_channel(channel_id))
+                channel_id = args[0]
+                await ctx.channel.send(self.Listener.remove_channel(str(ctx.guild.id), channel_id))
 
             elif index == 'list':
-                await ctx.channel.send(f"{self.Listener.data}")
+                response = {}
+                for channel_id in (x := self.Listener.data[str(ctx.guild.id)]):
+                    channel_name = (get(ctx.guild.channels, id=int(channel_id))).name
+                    category_name = (get(ctx.guild.categories, id=int(x[channel_id]['category']))).name
+                    response[channel_name] = int(channel_id)
+                    response[category_name] = int(x[channel_id]['category'])
+
+                await ctx.channel.send(f"{self.Listener.data[str(ctx.guild.id)]}")
+                await ctx.channel.send(f"{response}")
 
             else:
                 await ctx.channel.send(HELP_MESSAGE)
-
-        except Exception as ex:
-            print(ex)
-            await ctx.channel.send('Unexpected error, check incoming data and try again')
+        #
+        # except Exception as ex:
+        #     pprint(ex)
+        #     await ctx.channel.send('Unexpected error, check incoming data and try again')
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -130,5 +142,13 @@ class Autoroom(commands.Cog):
         Saver.data_path = data_path
         data = Saver.read()
         self.Listener.data = data
-        print("Loaded autoroom data:")
-        print(data)
+        flag_to_write = False
+        for guild in self.bot.guilds:
+            if str(guild.id) not in self.Listener.data:
+                self.Listener.data[str(guild.id)] = {}
+                flag_to_write = True
+        if flag_to_write:
+            data = self.Listener.data
+            Saver.save(data)
+        pprint("Loaded autoroom data:")
+        pprint(data)
