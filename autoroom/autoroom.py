@@ -1,18 +1,40 @@
 from redbot.core import commands
 from discord.utils import get
+from redbot.core import data_manager
+import json
 
 HELP_MESSAGE = """
     - add channel_name category_name
     - remove channel_name
 """
 
+SAVE_FILE_NAME = "AutoroomData"
+
 
 class Saver:
-    pass
+    data_path = ''
+
+    @classmethod
+    def save(cls, data):
+        if cls.data_path:
+            with open(cls.data_path, 'w') as f:
+                json.dump(data, f)
+
+    @classmethod
+    def read(cls):
+        if cls.data_path:
+            try:
+                with open(cls.data_path, 'r') as f:
+                    data = json.load(f)
+                    return data
+            except json.JSONDecodeError:
+                return {}
+            except FileNotFoundError:
+                cls.save({})
+                return cls.read()
 
 
 class ChannelListener:
-
     # data = {
     # channel_id: {
     # "channel": channel_name,
@@ -34,6 +56,7 @@ class ChannelListener:
             'suffix': channel_suffix
         }
         self.data[channel_name] = channel_data
+        Saver.save(self.data)
         return 'Successful added channel to listener'
 
     # def remove_channel(self, channel):
@@ -52,12 +75,14 @@ class Autoroom(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        for channel_id in (x := ChannelListener.data):
+        for channel_id in (x := Listener.data):
             category = get(member.guild.categories, name=x[channel_id]['category'])
             if before.channel:
                 if (y := before.channel) in category.channels:
                     if len(y.members) == 0:
                         await y.delete()
+                    if not after.channel:
+                        break
 
             if after.channel:
                 if after.channel.name == x[channel_id]['channel']:
@@ -65,6 +90,8 @@ class Autoroom(commands.Cog):
                     new_channel = await member.guild.create_voice_channel(new_channel_name, category=category)
                     await new_channel.edit(reason=None, position=0)
                     await member.move_to(new_channel)
+                    if not before.channel:
+                        break
 
     @commands.command()
     @commands.is_owner()
@@ -93,3 +120,12 @@ class Autoroom(commands.Cog):
         except Exception as ex:
             print(ex)
             await ctx.channel.send('Unexpected error, check incoming data and try again')
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        data_path = str(data_manager.cog_data_path(self)) + "/" + SAVE_FILE_NAME + ".json"
+        Saver.data_path = data_path
+        data = Saver.read()
+        Listener.data = data
+        print("Loaded autoroom data:")
+        print(data)
