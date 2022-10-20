@@ -4,8 +4,8 @@ from redbot.core import data_manager
 import json
 
 HELP_MESSAGE = """
-    - add channel_name category_name
-    - remove channel_name
+    - add channel_id category_id (optional) suffix
+    - remove channel_id
 """
 
 SAVE_FILE_NAME = "AutoroomData"
@@ -40,7 +40,6 @@ class ChannelListener:
     # "channel": channel_name,
     # "category": category_name,
     # "table_prefix": table_prefix
-    # 'room_count': room_count
     # }
     # }
     data = {}
@@ -57,25 +56,26 @@ class ChannelListener:
         }
         self.data[channel_name] = channel_data
         Saver.save(self.data)
-        return 'Successful added channel to listener'
+        return 'Channel added successfully'
 
-    # def remove_channel(self, channel):
-    #     self.channels.remove(channel)
-
-    def reset_channels(self):
-        self.data = {}
-
-
-Listener = ChannelListener()
+    def remove_channel(self, channel_id):
+        try:
+            self.data.pop(channel_id)
+            Saver.save(self.data)
+        except KeyError:
+            return "This channel aren't in use"
+        else:
+            return "Channel removed successfully"
 
 
 class Autoroom(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.Listener = ChannelListener()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        for channel_id in (x := Listener.data):
+        for channel_id in (x := self.Listener.data):
             category = get(member.guild.categories, name=x[channel_id]['category'])
             if before.channel:
                 if (y := before.channel) in category.channels:
@@ -97,8 +97,8 @@ class Autoroom(commands.Cog):
     @commands.is_owner()
     async def autoroom(self, ctx, index, *args):
         try:
+            channel_id = args[0]
             if index == 'add':
-                channel_id = args[0]
                 category_id = args[1]
                 channel = get(ctx.guild.channels, id=int(channel_id))
                 category = get(ctx.guild.categories, id=int(category_id))
@@ -108,11 +108,14 @@ class Autoroom(commands.Cog):
                     await ctx.channel.send("Category name error")
                 else:
                     new_channel_suffix = ' '.join(str(x) for x in args[2:]) if len(args) > 2 else None
-                    response = Listener.add_channel(channel_id, channel.name, category.name, new_channel_suffix)
+                    response = self.Listener.add_channel(channel_id, channel.name, category.name, new_channel_suffix)
                     await ctx.channel.send(f"{response}")
 
+            elif index == 'remove':
+                await ctx.channel.send(self.Listener.remove_channel(channel_id))
+
             elif index == 'list':
-                await ctx.channel.send(f"{Listener.data}")
+                await ctx.channel.send(f"{self.Listener.data}")
 
             else:
                 await ctx.channel.send(HELP_MESSAGE)
@@ -126,6 +129,6 @@ class Autoroom(commands.Cog):
         data_path = str(data_manager.cog_data_path(self)) + "/" + SAVE_FILE_NAME + ".json"
         Saver.data_path = data_path
         data = Saver.read()
-        Listener.data = data
+        self.Listener.data = data
         print("Loaded autoroom data:")
         print(data)
