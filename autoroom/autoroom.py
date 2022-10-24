@@ -86,7 +86,7 @@ class Autoroom(commands.Cog):
                     if not after.channel:
                         break
 
-            if after.channel:
+            if after.channel and (not member.bot):
                 if after.channel.id == int(channel_id):
                     new_channel_name = f"{member.nick if member.nick else member.name}`s {x[channel_id]['suffix']}"
                     new_channel = await member.guild.create_voice_channel(new_channel_name, category=category)
