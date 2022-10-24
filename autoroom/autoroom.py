@@ -1,4 +1,4 @@
-from redbot.core import commands
+from redbot.core import commands, checks
 from discord.utils import get
 from redbot.core import data_manager
 import json
@@ -96,9 +96,9 @@ class Autoroom(commands.Cog):
                         break
 
     @commands.command()
-    @commands.is_owner()
+    @checks.guildowner()
     async def autoroom(self, ctx, index, *args):
-        # try:
+        try:
             if index == 'add':
                 channel_id = args[0]
                 category_id = args[1]
@@ -120,21 +120,37 @@ class Autoroom(commands.Cog):
 
             elif index == 'list':
                 response = {}
-                for channel_id in (x := self.Listener.data[str(ctx.guild.id)]):
+                _DATA = self.Listener.data.get(str(ctx.guild.id))
+                if not _DATA:
+                    await ctx.channel.send("List are empty")
+                    return 0
+
+                for channel_id in _DATA:
                     channel_name = (get(ctx.guild.channels, id=int(channel_id))).name
                     category_name = (get(ctx.guild.categories, id=int(x[channel_id]['category']))).name
                     response[channel_name] = int(channel_id)
                     response[category_name] = int(x[channel_id]['category'])
 
                 await ctx.channel.send(f"{self.Listener.data[str(ctx.guild.id)]}")
+
                 await ctx.channel.send(f"{response}")
 
             else:
                 await ctx.channel.send(HELP_MESSAGE)
-        #
-        # except Exception as ex:
-        #     pprint(ex)
-        #     await ctx.channel.send('Unexpected error, check incoming data and try again')
+
+        except Exception as ex:
+            pprint(ex)
+            await ctx.channel.send('Unexpected error, check incoming data and try again')
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        if (ID := str(guild.id)) not in (DATA := self.Listener.data):
+            DATA[ID] = []
+
+    @commands.Cog.listener()
+    async def on_guild_remove(self, guild):
+        if (ID := str(guild.id)) in (DATA := self.Listener.data):
+            DATA.pop(ID)
 
     @commands.Cog.listener()
     async def on_ready(self):
