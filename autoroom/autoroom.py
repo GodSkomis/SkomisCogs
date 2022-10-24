@@ -127,9 +127,9 @@ class Autoroom(commands.Cog):
 
                 for channel_id in _DATA:
                     channel_name = (get(ctx.guild.channels, id=int(channel_id))).name
-                    category_name = (get(ctx.guild.categories, id=int(x[channel_id]['category']))).name
+                    category_name = (get(ctx.guild.categories, id=int(_DATA[channel_id]['category']))).name
                     response[channel_name] = int(channel_id)
-                    response[category_name] = int(x[channel_id]['category'])
+                    response[category_name] = int(_DATA[channel_id]['category'])
 
                 await ctx.channel.send(f"{self.Listener.data[str(ctx.guild.id)]}")
 
