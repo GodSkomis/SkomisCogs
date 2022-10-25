@@ -1,9 +1,7 @@
 from discord import ClientException
-
 from .youtubeDriver import find_song
 from redbot.core import commands
 import discord
-from pprint import pprint
 
 INVALID_URL_ERROR_MESSAGE = "Invalid URL"
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -28,10 +26,22 @@ class Music(commands.Cog):
         self.remaining_playlist = []
         self.general_playlist = []
 
+    def get_voice_client(self):
+        voice_client = self.voice_channel.guild.voice_client
+        return voice_client
+
+    def _stop_voice_client(self):
+        voice_client = self._get_voice_client()
+        if voice_client.is_playing:
+            voice_client.stop()
+
     def _play_next(self, slice_numbers=1):
         if self.remaining_playlist:
             for i in range(slice_numbers):
-                self.general_playlist.append(self.remaining_playlist.pop(0))
+                try:
+                    self.general_playlist.append(self.remaining_playlist.pop(0))
+                except IndexError:
+                    break
             self.play_next()
 
     def play_next(self):
@@ -44,6 +54,7 @@ class Music(commands.Cog):
                                                        after=lambda e: self._play_next())
         else:
             self.is_playing = False
+            self._stop_voice_client()
 
     async def start_play(self):
         self.is_playing = True
@@ -69,9 +80,9 @@ class Music(commands.Cog):
         if not song_info:
             ctx.channel.send(INVALID_URL_ERROR_MESSAGE)
             return
-        if len(url) > 1:
-            await ctx.channel.send("I inform you, i added song to queue but, i don't wanna play a "
-                                   "playlist for mortal being")
+        # if len(url) > 1:
+        #     await ctx.channel.send("I inform you, i added song to queue but, i don't wanna play a "
+        #                            "playlist for mortal being")
 
         song_titles = song_info['title']
         if not song_titles:
@@ -91,7 +102,10 @@ class Music(commands.Cog):
                 await voice_channel.connect()
             except ClientException:
                 return
-            await self.start_play()
+        voice_client = self.get_voice_client()
+        if voice_client:
+            if not voice_client.is_playing():
+                await self.start_play()
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -110,7 +124,7 @@ class Music(commands.Cog):
 
     @commands.command()
     async def music(self, ctx, index=None, arg1=None):
-        if index == 'play':
+        if index == 'play' or 'add':
             if arg1:
                 await self.play(ctx, arg1)
             else:
@@ -160,4 +174,6 @@ class Music(commands.Cog):
                 for k in range(1, len(self.remaining_playlist)):
                     song = self.remaining_playlist[k]
                     response += f"№{k + i} - {song['title']}\n"
+            if not response:
+                response = "Playlist are empty"
             await ctx.channel.send(response)
