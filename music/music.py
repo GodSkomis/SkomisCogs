@@ -133,7 +133,12 @@ class Music(commands.Cog):
                 else:
                     await ctx.channel.send("Summon me first insect")
         if index == 'queue' or index == 'list':
-            await ctx.channel.send(str([x['title'] for x in self.playlist]))
+            i = 0
+            response = ""
+            for song in self.playlist:
+                i += 1
+                response += f"#{i} - {song['title']}"
+            await ctx.channel.send(response)
         # if index == 'follow' or index == 'move':
         #     new_voice = await self._check_voice(ctx)
         #     if new_voice:
