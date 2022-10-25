@@ -13,23 +13,33 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.playlist = []
+        self.remaining_playlist = []
+        self.general_playlist = []
         self.is_playing = False
         self.voice_channel = None
+
+    def _get_voice_client(self):
+        if self.voice_channel:
+            return self.voice_channel.guild.voice_client
 
     def reset(self):
         self.voice_channel = None
         self.is_playing = False
-        self.playlist = []
+        self.remaining_playlist = []
+        self.general_playlist = []
 
     def _play_next(self, slice_numbers=1):
-        if self.playlist:
-            self.playlist = self.playlist[int(slice_numbers):]
+        if self.remaining_playlist:
+            for i in range(slice_numbers):
+                self.general_playlist.append(self.remaining_playlist.pop(0))
             self.play_next()
 
     def play_next(self):
-        if self.playlist:
-            song = self.playlist[0]
+        if self.remaining_playlist:
+            voice_client = self._get_voice_client()
+            if voice_client.is_playing():
+                voice_client.pause()
+            song = self.remaining_playlist[0]
             self.voice_channel.guild.voice_client.play(discord.FFmpegPCMAudio(song['source'], **FFMPEG_OPTIONS),
                                                        after=lambda e: self._play_next())
         else:
@@ -38,10 +48,6 @@ class Music(commands.Cog):
     async def start_play(self):
         self.is_playing = True
         self.play_next()
-
-    def _get_voice_client(self):
-        if self.voice_channel:
-            return self.voice_channel.guild.voice_client
 
     @staticmethod
     async def _check_voice(ctx):
@@ -71,13 +77,14 @@ class Music(commands.Cog):
         if not song_titles:
             song_titles = "NoName"
         source = song_info['formats'][0]['url']
-        self.playlist.append({
+        self.remaining_playlist.append({
             'title': song_titles,
             'source': source
         })
-
-        await ctx.channel.send(f"{song_titles} track #{len(self.playlist)} in playlist")
-
+        len1 = len(self.remaining_playlist)
+        len2 = len(self.general_playlist)
+        await ctx.channel.send(f"***{song_titles}*** | *track* **№{len1+len2}** *in playlist*")
+        await ctx.message.delete()
         if not self.voice_channel:
             try:
                 self.voice_channel = voice_channel
@@ -95,11 +102,20 @@ class Music(commands.Cog):
                 await voice_client.disconnect()
                 self.reset()
 
+    async def _resume(self, ctx):
+        if (not self.is_playing) and self.remaining_playlist:
+            self.is_playing = True
+            await ctx.channel.send(f"Now is playing:\n{self.remaining_playlist[0]['title']}")
+            self.voice_channel.guild.voice_client.resume()
+
     @commands.command()
     async def music(self, ctx, index=None, arg1=None):
         if index == 'play':
             if arg1:
                 await self.play(ctx, arg1)
+            else:
+                await self._resume(ctx)
+
         if index == 'pause':
             if self.is_playing:
                 self.voice_channel.guild.voice_client.pause()
@@ -108,22 +124,20 @@ class Music(commands.Cog):
             else:
                 response = "I'm not playing now"
             await ctx.channel.send(response)
+
         if index == 'resume':
-            if (not self.is_playing) and self.playlist:
-                self.is_playing = True
-                await ctx.channel.send(f"Now is playin: {self.playlist[0]['title']}")
-                self.voice_channel.guild.voice_client.resume()
+            await self._resume(ctx)
+
         if index == 'stop':
             voice_client = self.voice_channel.guild.voice_client
             voice_client.stop()
             await voice_client.disconnect()
             self.reset()
+
         if index == 'skip' or index == 'next':
-            if self.playlist:
-                skip_nuber = int(arg1) if str(arg1).isdigit() else 1
-                voice_client = self._get_voice_client()
-                voice_client.stop()
-                self._play_next(skip_nuber)
+            if self.remaining_playlist:
+                slice_numbers = int(arg1) if str(arg1).isdigit() else 1
+                self._play_next(slice_numbers)
             else:
                 if self.voice_channel:
                     voice_client = self._get_voice_client()
@@ -132,21 +146,18 @@ class Music(commands.Cog):
                     await ctx.channel.send("**Playlist end**, see you insect")
                 else:
                     await ctx.channel.send("Summon me first insect")
+
         if index == 'queue' or index == 'list':
             i = 0
             response = ""
-            for song in self.playlist:
-                i += 1
-                response += f"#{i} - {song['title']}"
+            if self.general_playlist:
+                for song in self.general_playlist:
+                    i += 1
+                    response += f"*№{i} - {song['title']}*\n"
+            if self.remaining_playlist:
+                i = len(self.general_playlist) + 1
+                response += f"**№{i}** - **{self.remaining_playlist[0]['title']}**\n"
+                for k in range(1, len(self.remaining_playlist)):
+                    song = self.remaining_playlist[k]
+                    response += f"№{k + i} - {song['title']}\n"
             await ctx.channel.send(response)
-        # if index == 'follow' or index == 'move':
-        #     new_voice = await self._check_voice(ctx)
-        #     if new_voice:
-        #         if new_voice.channel == self.voice_channel:
-        #             await ctx.channel.send("Im here already")
-        #         voice_client = self._get_voice_client()
-        #         voice_client.pause()
-        #         await voice_client.disconnect()
-        #         await new_voice.channel.connect()
-        #         self.voice_channel = new_voice.channel
-        #         voice_client.resume()
