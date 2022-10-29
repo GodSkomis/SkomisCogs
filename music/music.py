@@ -1,11 +1,15 @@
 from discord import ClientException
-from .youtubeDriver import find_song
+from .youtubeDriver import find_song, find_playlist
 from redbot.core import commands
 import discord
 
 INVALID_URL_ERROR_MESSAGE = "Invalid URL"
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-                  'options': '-vn'}
+                  'options': '-vn -b:a 128000'}
+
+
+async def _send_error_msg(ctx):
+    ctx.channel.send(INVALID_URL_ERROR_MESSAGE)
 
 
 class Music(commands.Cog):
@@ -34,6 +38,12 @@ class Music(commands.Cog):
         voice_client = self._get_voice_client()
         if voice_client.is_playing:
             voice_client.stop()
+
+    async def _resume(self, ctx):
+        if (not self.is_playing) and self.remaining_playlist:
+            self.is_playing = True
+            await ctx.channel.send(f"Now is playing:\n{self.remaining_playlist[0]['title']}")
+            self.voice_channel.guild.voice_client.resume()
 
     def _play_next(self, slice_numbers=1):
         if self.remaining_playlist:
@@ -64,29 +74,11 @@ class Music(commands.Cog):
     async def _check_voice(ctx):
         voice = ctx.author.voice
         if not voice:
-            await ctx.channel.send("Connect to voice channel first")
+            await ctx.channel.send("Join to voice channel and then summon me")
         return voice
 
-    async def play(self, ctx, raw_url):
-        voice = await self._check_voice(ctx)
-        if not voice:
-            return
-
-        voice_channel = voice.channel
-        url = raw_url.split('&')
-
-        song_info = await find_song(url[0])
-
-        if not song_info:
-            ctx.channel.send(INVALID_URL_ERROR_MESSAGE)
-            return
-        # if len(url) > 1:
-        #     await ctx.channel.send("I inform you, i added song to queue but, i don't wanna play a "
-        #                            "playlist for mortal being")
-
-        song_titles = song_info['title']
-        if not song_titles:
-            song_titles = "NoName"
+    def _handle_song(self, song_info):
+        song_titles = str(song_info.get('artist')) + ' - ' + str(song_info.get('title'))
         source = song_info['formats'][0]['url']
         self.remaining_playlist.append({
             'title': song_titles,
@@ -94,8 +86,31 @@ class Music(commands.Cog):
         })
         len1 = len(self.remaining_playlist)
         len2 = len(self.general_playlist)
-        await ctx.channel.send(f"***{song_titles}*** | *track* **№{len1+len2}** *in playlist*")
+        response = f"***{song_titles}*** | *track* **№{len1 + len2}** *in playlist*\n"
+        return response
+
+    async def play(self, ctx, raw_url: str, is_playlist=False):
+        voice = await self._check_voice(ctx)
+        if not voice or raw_url.isdigit():
+            return
+        voice_channel = voice.channel
+        response = ''
+        if is_playlist:
+            song_info = find_playlist(raw_url)
+            if not song_info:
+                await _send_error_msg(ctx)
+            for song in song_info:
+                response += self._handle_song(song)
+        else:
+            url = raw_url.split('&')[0]
+            song_info = find_song(url)
+            if not song_info:
+                await _send_error_msg(ctx)
+            response = self._handle_song(song_info)
+
+        await ctx.channel.send(response)
         await ctx.message.delete()
+
         if not self.voice_channel:
             try:
                 self.voice_channel = voice_channel
@@ -116,16 +131,12 @@ class Music(commands.Cog):
                 await voice_client.disconnect()
                 self.reset()
 
-    async def _resume(self, ctx):
-        if (not self.is_playing) and self.remaining_playlist:
-            self.is_playing = True
-            await ctx.channel.send(f"Now is playing:\n{self.remaining_playlist[0]['title']}")
-            self.voice_channel.guild.voice_client.resume()
-
     @commands.command()
-    async def music(self, ctx, index=None, arg1=None):
+    async def music(self, ctx, index=None, arg1=None, arg2=None):
         if index == 'play' or 'add':
-            if arg1:
+            if arg1 == 'playlist' and arg2:
+                await self.play(ctx, arg2, is_playlist=True)
+            elif arg1:
                 await self.play(ctx, arg1)
             else:
                 await self._resume(ctx)
