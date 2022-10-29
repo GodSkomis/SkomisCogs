@@ -11,9 +11,10 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 async def _send_error_msg(ctx):
     ctx.channel.send(INVALID_URL_ERROR_MESSAGE)
 
+
 async def _send_big_message(ctx, response):
     message = response
-    for i in range(message//2000):
+    for i in range(len(message) // 2000):
         await ctx.channel.send(message[:2000])
         message = message[2000:]
     await ctx.channel.send(message)
@@ -115,7 +116,7 @@ class Music(commands.Cog):
                 await _send_error_msg(ctx)
             response = self._handle_song(song_info)
 
-        await ctx.channel.send(response)
+        await _send_big_message(ctx, response)
         await ctx.message.delete()
 
         if not self.voice_channel:
