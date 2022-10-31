@@ -1,7 +1,7 @@
-from discord import ClientException
 from .youtubeDriver import find_song, find_playlist
-from redbot.core import commands
-import discord
+from discord.ext import commands
+from discord import FFmpegPCMAudio, ClientException
+
 
 INVALID_URL_ERROR_MESSAGE = "Invalid URL"
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
@@ -68,7 +68,7 @@ class Music(commands.Cog):
             if voice_client.is_playing():
                 voice_client.pause()
             song = self.remaining_playlist[0]
-            self.voice_channel.guild.voice_client.play(discord.FFmpegPCMAudio(song['source'], **FFMPEG_OPTIONS),
+            self.voice_channel.guild.voice_client.play(FFmpegPCMAudio(song['source'], **FFMPEG_OPTIONS),
                                                        after=lambda e: self._play_next())
         else:
             self.is_playing = False
@@ -86,11 +86,11 @@ class Music(commands.Cog):
         return voice
 
     def _handle_song(self, song_info):
-        song_titles = str(song_info.get('artist')) + ' - ' + str(song_info.get('title'))
-        source = song_info['formats'][0]['url']
+        song_titles = f"{str(song_info.get('artist'))} - {str(song_info.get('title'))}"
+        source_url = song_info['url']
         self.remaining_playlist.append({
             'title': song_titles,
-            'source': source
+            'source': source_url
         })
         len1 = len(self.remaining_playlist)
         len2 = len(self.general_playlist)
@@ -141,6 +141,9 @@ class Music(commands.Cog):
 
     @commands.command()
     async def music(self, ctx, index=None, arg1=None, arg2=None):
+        if index == 'tst':
+            await ctx.channel.send(arg1)
+            await ctx.channel.send(arg2)
         if index == 'play' or 'add':
             if arg1 == 'playlist' and arg2:
                 await self.play(ctx, arg2, is_playlist=True)

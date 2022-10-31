@@ -1,19 +1,20 @@
-from redbot.core import commands, checks
+from discord.ext import commands
 from discord.utils import get
-from redbot.core import data_manager
 import json
 from pprint import pprint
+import pathlib
+
 
 HELP_MESSAGE = """
     - add channel_id category_id (optional) suffix
     - remove channel_id
 """
 
-SAVE_FILE_NAME = "AutoroomData"
-
 
 class Saver:
-    data_path = ''
+
+    SAVE_FILE_NAME = "AutoroomData"
+    data_path = f"{pathlib.Path().resolve()}/_Data/{SAVE_FILE_NAME}.json"
 
     @classmethod
     def save(cls, data):
@@ -33,6 +34,10 @@ class Saver:
             except FileNotFoundError:
                 cls.save({})
                 return cls.read()
+
+
+def is_guild_owner(ctx):
+    return ctx.author.id == ctx.guild.owner_id
 
 
 class ChannelListener:
@@ -98,7 +103,7 @@ class Autoroom(commands.Cog):
                         break
 
     @commands.command()
-    @checks.guildowner()
+    # @commands.check(is_guild_owner)
     async def autoroom(self, ctx, index, *args):
         try:
             if index == 'add':
@@ -156,8 +161,6 @@ class Autoroom(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        data_path = str(data_manager.cog_data_path(self)) + "/" + SAVE_FILE_NAME + ".json"
-        Saver.data_path = data_path
         data = Saver.read()
         self.Listener.data = data
         flag_to_write = False

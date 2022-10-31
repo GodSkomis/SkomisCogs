@@ -1,8 +1,15 @@
 .idea/
 venv/
+botenv/
 todo.info
 old_autoroom.py
 _RedBot_DATA/
+test/
+old_music.py
+todo.list
+_Data/
+bot.py
+tst.py
 
 ### Python template
 # Byte-compiled / optimized / DLL files
