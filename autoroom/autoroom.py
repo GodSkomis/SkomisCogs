@@ -1,8 +1,6 @@
 from discord.ext import commands
 from discord.utils import get
-import json
 from pprint import pprint
-import pathlib
 
 
 HELP_MESSAGE = """
@@ -11,45 +9,15 @@ HELP_MESSAGE = """
 """
 
 
-class Saver:
-
-    SAVE_FILE_NAME = "AutoroomData"
-    data_path = f"{pathlib.Path().resolve()}/_Data/{SAVE_FILE_NAME}.json"
-
-    @classmethod
-    def save(cls, data):
-        if cls.data_path:
-            with open(cls.data_path, 'w') as f:
-                json.dump(data, f)
-
-    @classmethod
-    def read(cls):
-        if cls.data_path:
-            try:
-                with open(cls.data_path, 'r') as f:
-                    data = json.load(f)
-                    return data
-            except json.JSONDecodeError:
-                return {}
-            except FileNotFoundError:
-                cls.save({})
-                return cls.read()
-
-
 def is_guild_owner(ctx):
     return ctx.author.id == ctx.guild.owner_id
 
 
 class ChannelListener:
-    # data = {
-    #     guild_id: {
-    #         channel_id: {
-    #             "category": category_id,
-    #             "suffix": channel_suffix
-    #         }
-    #     }
-    # }
     data = {}
+
+    def __init__(self, saver):
+        self.Saver = saver
 
     def add_channel(self, guild_id, channel_id: str, category_id, channel_suffix):
         if channel_id in self.data[str(guild_id)]:
@@ -62,13 +30,14 @@ class ChannelListener:
         }
         guild_data = self.data[guild_id]
         guild_data[channel_id] = channel_data
-        Saver.save(self.data)
+        self.Saver.insert(self.data)
         return 'Channel added successfully'
 
     def remove_channel(self, guild_id, channel_id):
         try:
             self.data[guild_id].pop(channel_id)
-            Saver.save(self.data)
+            # self.Saver.delete(channel_id)
+            self.Saver.insert(self.data)
         except KeyError:
             return "This channel aren't in use"
         else:
@@ -76,9 +45,10 @@ class ChannelListener:
 
 
 class Autoroom(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot, saver):
         self.bot = bot
-        self.Listener = ChannelListener()
+        self.Saver = saver.Autoroom
+        self.Listener = ChannelListener(saver.Autoroom)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -123,7 +93,7 @@ class Autoroom(commands.Cog):
 
             elif index == 'remove':
                 channel_id = args[0]
-                await ctx.channel.send(self.Listener.remove_channel(str(ctx.guild.id), channel_id))
+                await ctx.channel.send(self.Listener.remove_channel(str(ctx.guild.id), str(channel_id)))
 
             elif index == 'list':
                 response = {}
@@ -161,15 +131,7 @@ class Autoroom(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        data = Saver.read()
+        data = self.Saver.getAll()
         self.Listener.data = data
-        flag_to_write = False
-        for guild in self.bot.guilds:
-            if str(guild.id) not in self.Listener.data:
-                self.Listener.data[str(guild.id)] = {}
-                flag_to_write = True
-        if flag_to_write:
-            data = self.Listener.data
-            Saver.save(data)
-        pprint("Loaded autoroom data:")
+        print("Loaded Autoroom data:")
         pprint(data)

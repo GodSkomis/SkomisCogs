@@ -10,6 +10,7 @@ todo.list
 _Data/
 bot.py
 tst.py
+bot.token
 
 ### Python template
 # Byte-compiled / optimized / DLL files
