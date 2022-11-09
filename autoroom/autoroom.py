@@ -36,8 +36,7 @@ class ChannelListener:
     def remove_channel(self, guild_id, channel_id):
         try:
             self.data[guild_id].pop(channel_id)
-            # self.Saver.delete(channel_id)
-            self.Saver.insert(self.data)
+            self.Saver.delete(channel_id)
         except KeyError:
             return "This channel aren't in use"
         else:
@@ -131,7 +130,7 @@ class Autoroom(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        data = self.Saver.getAll()
+        data = self.Saver.get()
         self.Listener.data = data
         print("Loaded Autoroom data:")
         pprint(data)

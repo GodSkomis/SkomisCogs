@@ -1,5 +1,5 @@
 from .autoroom import Autoroom
 
 
-async def setup(bot, Saver):
-    await bot.add_cog(Autoroom(bot, Saver))
+async def setup(bot, saver):
+    await bot.add_cog(Autoroom(bot, saver))
