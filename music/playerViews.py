@@ -6,6 +6,8 @@ player = Player()
 
 
 class SongModal(ui.Modal, title='URL Input'):
+    def __init__(self):
+        super().__init__(timeout=None)
     is_playlist = False
     url = ui.TextInput(label='Enter Youtube URL', style=TextStyle.short, placeholder='https:///youtube.com/',
                        required=True)
@@ -50,11 +52,15 @@ class MusicPlayerView(ui.View):
     # @ui.button(label='Playlist', emoji='📓', style=ButtonStyle.blurple)
     # async def list_button(self, interaction, incoming_button):
     #     guild_id = str(interaction.guild_id)
-    #     await player.update_queue_message(guild_id)
+    #     await (await player.bot.get_command('music')).__call__(interaction)
+    #     # await player.update_queue_message(guild_id)
     #     await interaction.response.defer()
 
 
 class AddSongView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
     @ui.button(label='Add song', style=ButtonStyle.grey)
     async def add_song_button(self, interaction, incoming_button):
         await interaction.response.send_modal(SongModal())
