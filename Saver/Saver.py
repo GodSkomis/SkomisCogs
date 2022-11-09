@@ -44,7 +44,8 @@ def _find(data, attr, handle_func, *args):
 class FileObject(AbstractFileObject):
     def _check_file_exist(self):
         if not os.path.isfile(self.filepath):
-            open(self.filepath, 'x')
+            with open(self.filepath, 'w') as f:
+                json.dump({}, f, indent=4)
 
     def __init__(self, filename):
         self.filename = str(filename)

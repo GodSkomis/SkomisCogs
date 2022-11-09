@@ -1,10 +1,8 @@
 import asyncio
-from pprint import pprint
-
 from discord import FFmpegPCMAudio, ClientException
 from .youtubeDriver import find_song, find_playlist
 from .utils import _send_error_msg
-from discord.utils import get
+from discord.utils import get as discord_get
 
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                   'options': '-vn -b:a 128000'}
@@ -20,13 +18,14 @@ class Player:
         return cls.Player
 
     def __init__(self, bot=None):
-        self.bot = bot
+        if bot:
+            self.bot = bot
         self.remaining_playlist = {}
         self.general_playlist = {}
         self.player_message = {}
 
     def voice_client(self, guild_id):
-        return get(self.bot.guilds, id=int(guild_id)).voice_client
+        return discord_get(self.bot.guilds, id=int(guild_id)).voice_client
 
     def is_playing(self, guild_id):
         if vc := self.voice_client(guild_id):
@@ -88,9 +87,9 @@ class Player:
                 self.general_playlist[guild_id].append(next_song)
                 await self.play_next(guild_id)
             except IndexError:
-                await self.stop(guild_id)
+                self.pause(guild_id)
         else:
-            self.pause(guild_id)
+            await self.stop(guild_id)
 
     async def play_next(self, guild_id):
         voice_client = self.voice_client(guild_id)
@@ -153,8 +152,6 @@ class Player:
         if not self.voice_client(guild_id):
             try:
                 await user_voice.channel.connect()
+                await self.play_next(guild_id)
             except ClientException:
                 pass
-
-        if not self.is_playing(guild_id):
-            await self.play_next(guild_id)
