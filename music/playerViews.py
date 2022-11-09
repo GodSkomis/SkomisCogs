@@ -3,7 +3,6 @@ from discord import ButtonStyle, TextStyle
 from .Player import Player
 
 player = Player()
-print(player)
 
 
 class SongModal(ui.Modal, title='URL Input'):
@@ -25,29 +24,34 @@ class MusicPlayerView(ui.View):
 
     @ui.button(label='Play', emoji='⏯️', style=ButtonStyle.green)
     async def play_button(self, interaction, incoming_button):
-        player.resume()
+        guild_id = str(interaction.guild_id)
+        await player.resume(guild_id)
         await interaction.response.edit_message(view=self)
 
     @ui.button(label='Pause', emoji='⏸️', style=ButtonStyle.gray)
     async def pause_button(self, interaction, incoming_button):
-        player.pause()
+        guild_id = str(interaction.guild_id)
+        player.pause(guild_id)
         await interaction.response.edit_message(view=self)
 
     @ui.button(label='Next', emoji='⏭️', style=ButtonStyle.blurple)
     async def next_button(self, interaction, incoming_button):
-        player._play_next()
-        await player.update_queue_message()
+        guild_id = str(interaction.guild_id)
+        await player._play_next(guild_id)
+        await player.update_queue_message(guild_id)
         await interaction.response.defer()
 
     @ui.button(label='Stop', emoji='⏹️', style=ButtonStyle.red)
     async def stop_button(self, interaction, incoming_button):
-        await player.stop()
+        guild_id = str(interaction.guild_id)
+        await player.stop(guild_id)
         await interaction.response.defer()
 
-    @ui.button(label='Playlist', emoji='📓', style=ButtonStyle.blurple)
-    async def list_button(self, interaction, incoming_button):
-        await player.update_queue_message()
-        await interaction.response.defer()
+    # @ui.button(label='Playlist', emoji='📓', style=ButtonStyle.blurple)
+    # async def list_button(self, interaction, incoming_button):
+    #     guild_id = str(interaction.guild_id)
+    #     await player.update_queue_message(guild_id)
+    #     await interaction.response.defer()
 
 
 class AddSongView(ui.View):

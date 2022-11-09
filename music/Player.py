@@ -1,6 +1,10 @@
+import asyncio
+from pprint import pprint
+
 from discord import FFmpegPCMAudio, ClientException
 from .youtubeDriver import find_song, find_playlist
 from .utils import _send_error_msg
+from discord.utils import get
 
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
                   'options': '-vn -b:a 128000'}
@@ -15,32 +19,30 @@ class Player:
 
         return cls.Player
 
-    def __init__(self):
-        self.remaining_playlist = []
-        self.general_playlist = []
-        self.voice_channel = None
-        self.list_message = None
+    def __init__(self, bot=None):
+        self.bot = bot
+        self.remaining_playlist = {}
+        self.general_playlist = {}
+        self.player_message = {}
 
-    @property
-    def voice_client(self):
-        return self._get_voice_client()
+    def voice_client(self, guild_id):
+        return get(self.bot.guilds, id=int(guild_id)).voice_client
 
-    @property
-    def is_playing(self):
-        if not self.voice_client:
-            return False
-        return self.voice_client.is_playing()
+    def is_playing(self, guild_id):
+        if vc := self.voice_client(guild_id):
+            return vc.is_playing()
+        return False
 
-    @property
-    def queue(self):
-        i = 0
+    def queue(self, guild_id):
+        i = 1
         response = ""
-        if general_playlist := self.Player.general_playlist:
+        if general_playlist := self.Player.general_playlist.get(guild_id):
             for song in general_playlist:
-                i += 1
                 response += f"*№{i} - {song['title']}*\n"
-        if remaining_playlist := self.Player.remaining_playlist:
-            i = len(general_playlist) + 1
+                i += 1
+
+        if remaining_playlist := self.Player.remaining_playlist.get(guild_id):
+            # i = len(general_playlist) + 1
             response += f"**№{i}** - **{remaining_playlist[0]['title']}**\n"
             for k in range(1, len(remaining_playlist)):
                 song = remaining_playlist[k]
@@ -49,121 +51,110 @@ class Player:
             response = "Playlist are empty"
         return response
 
-    async def update_queue_message(self):
-        if self.list_message:
-            await self.list_message.edit(content=self.queue)
+    async def update_queue_message(self, guild_id, message=None):
+        if msg := self.player_message.get(guild_id):
+            if not message:
+                message = self.queue(guild_id)
+            self.player_message[guild_id] = await msg.edit(content=message)
 
-    def _get_voice_client(self):
-        if self.voice_channel:
-            return self.voice_channel.guild.voice_client
+    async def reset(self, guild_id):
+        self.remaining_playlist[guild_id] = []
+        self.general_playlist[guild_id] = []
+        await self.update_queue_message(guild_id)
 
-    def reset(self):
-        self.voice_channel = None
-        self.list_message = None
-        self.remaining_playlist = []
-        self.general_playlist = []
-
-    def get_voice_client(self):
-        voice_client = self.voice_channel.guild.voice_client
-        return voice_client
-
-    def _stop_voice_client(self):
-        if self.is_playing:
-            self.voice_client.stop()
-
-    def pause(self):
-        if self.is_playing:
-            self.voice_client.pause()
-            return True
-        return False
-
-    def resume(self):
-        if (not self.is_playing) and self.remaining_playlist:
-            self.voice_client.resume()
-
-    async def _resume(self, ctx):
-        if (not self.is_playing) and self.remaining_playlist:
-            # await ctx.channel.send(f"Now is playing:\n{self.remaining_playlist[0]['title']}")
-            self.voice_channel.guild.voice_client.resume()
-
-    def _play_next(self, slice_numbers=1):
-        if self.remaining_playlist:
-            for i in range(slice_numbers):
-                try:
-                    self.general_playlist.append(self.remaining_playlist.pop(0))
-                except IndexError:
-                    break
-            self.play_next()
-
-    def play_next(self):
-        if self.remaining_playlist:
-            voice_client = self._get_voice_client()
+    def pause(self, guild_id):
+        voice_client = self.voice_client(guild_id)
+        if voice_client:
             if voice_client.is_playing():
                 voice_client.pause()
-            song = self.remaining_playlist[0]
-            self.voice_channel.guild.voice_client.play(FFmpegPCMAudio(song['source'], **FFMPEG_OPTIONS),
-                                                       after=lambda e: self._play_next())
+                return True
+        return False
+
+    async def resume(self, guild_id):
+        voice_client = self.voice_client(guild_id)
+        if voice_client:
+            if (not voice_client.is_playing()) and self.remaining_playlist.get(guild_id):
+                voice_client.resume()
+                await self.update_queue_message(guild_id)
+                return True
+        return False
+
+    async def _play_next(self, guild_id):
+        if self.remaining_playlist.get(guild_id):
+            try:
+                next_song = self.remaining_playlist[guild_id].pop(0)
+                if not self.general_playlist.get(guild_id):
+                    self.general_playlist[guild_id] = []
+                self.general_playlist[guild_id].append(next_song)
+                await self.play_next(guild_id)
+            except IndexError:
+                await self.stop(guild_id)
         else:
-            self._stop_voice_client()
+            self.pause(guild_id)
 
-    async def start_play(self):
-        self.play_next()
+    async def play_next(self, guild_id):
+        voice_client = self.voice_client(guild_id)
+        if voice_client:
+            if voice_client.is_playing():
+                voice_client.pause()
+            song = self.remaining_playlist[guild_id][0]
+            voice_client.play(FFmpegPCMAudio(song['source'], **FFMPEG_OPTIONS),
+                              after=lambda e: self.bot.loop.create_task(self._play_next(guild_id)))
+            voice_client.pause()
+            await self.update_queue_message(guild_id)
+            await asyncio.sleep(1)
+            voice_client.resume()
 
-    @staticmethod
-    async def _check_voice(ctx):
+        else:
+            await self.update_queue_message(guild_id, message="Bot isn't connected")
+
+    async def _check_voice(self, ctx):
         voice = ctx.user.voice
-        if not voice:
-            await ctx.channel.send("Join to voice channel and then summon me")
-        return voice
+        if voice:
+            return voice
+        await self.update_queue_message(ctx.guild.id, message="Join to voice channel and then summon me")
 
-    def _handle_song(self, song_info):
+    def _handle_song(self, song_info, guild_id):
         song_titles = f"{str(song_info.get('artist'))} - {str(song_info.get('title'))}"
         source_url = song_info['url']
-        self.remaining_playlist.append({
+        if not self.remaining_playlist.get(guild_id):
+            self.remaining_playlist[guild_id] = []
+        self.remaining_playlist[guild_id].append({
             'title': song_titles,
             'source': source_url
         })
-        len1 = len(self.remaining_playlist)
-        len2 = len(self.general_playlist)
-        response = f"***{song_titles}*** | *track* **№{len1 + len2}** *in playlist*\n"
-        return response
 
-    async def stop(self):
-        if self.voice_client:
-            self.voice_client.stop()
-            await self.voice_client.disconnect()
-            self.reset()
+    async def stop(self, guild_id):
+        if vc := self.voice_client(guild_id):
+            vc.stop()
+            await vc.disconnect()
+            await self.reset(guild_id)
 
     async def play(self, ctx, raw_url: str, is_playlist=False):
-        voice = await self._check_voice(ctx)
-        if not voice or raw_url.isdigit():
-            return
-        voice_channel = voice.channel
-        response = ''
+        user_voice = await self._check_voice(ctx)
+        if not user_voice or raw_url.isdigit():
+            await _send_error_msg(ctx)
+        guild_id = str(ctx.guild.id)
+        await self.update_queue_message(guild_id, message='Download started')
         await ctx.response.defer()
         if is_playlist:
             song_info = find_playlist(raw_url)
             if not song_info:
                 await _send_error_msg(ctx)
             for song in song_info:
-                response += self._handle_song(song)
+                self._handle_song(song, guild_id)
         else:
             url = raw_url.split('&')[0]
             song_info = find_song(url)
             if not song_info:
                 await _send_error_msg(ctx)
-            response = self._handle_song(song_info)
-
-        # await _send_big_message(ctx, response)
-        # await ctx.message.delete()
-        if not self.voice_channel:
+            self._handle_song(song_info, guild_id)
+        await self.update_queue_message(guild_id, message=self.queue(guild_id))
+        if not self.voice_client(guild_id):
             try:
-                self.voice_channel = voice_channel
-                await voice_channel.connect()
+                await user_voice.channel.connect()
             except ClientException:
-                return
-        voice_client = self.get_voice_client()
-        if voice_client:
-            if not voice_client.is_playing():
-                await self.start_play()
-        await self.update_queue_message()
+                pass
+
+        if not self.is_playing(guild_id):
+            await self.play_next(guild_id)
