@@ -9,13 +9,13 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 
 
 class Player:
-    Player = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls.Player:
-            cls.Player = super().__new__(cls)
-
-        return cls.Player
+    # Player = None
+    #
+    # def __new__(cls, *args, **kwargs):
+    #     if not cls.Player:
+    #         cls.Player = super().__new__(cls)
+    #
+    #     return cls.Player
 
     def __init__(self, bot=None):
         if bot:
@@ -36,13 +36,13 @@ class Player:
         i = 1
         to_play_list = []
         played_list = []
-        if general_playlist := self.Player.general_playlist.get(guild_id):
+        if general_playlist := self.general_playlist.get(guild_id):
             for song in general_playlist:
                 played_list.append(f"*№{i} - {song['title']}*\n")
                 i += 1
             to_play_list.append(played_list[-1:][0])
             played_list = played_list[:-1]
-        if remaining_playlist := self.Player.remaining_playlist.get(guild_id):
+        if remaining_playlist := self.remaining_playlist.get(guild_id):
             to_play_list.append(f"**№{i}** - **{remaining_playlist[0]['title']}**\n")
             for k in range(1, len(remaining_playlist)):
                 song = remaining_playlist[k]

@@ -47,8 +47,8 @@ class Music(commands.Cog):
         async for message in channel.history():
             messages.append(message)
         await channel.delete_messages(messages)
-        await channel.send('', view=MusicPlayerView())
-        await channel.send('', view=AddSongView())
+        await channel.send('', view=MusicPlayerView(self.Player))
+        await channel.send('', view=AddSongView(self.Player))
         guild_id = str(channel.guild.id)
         self.Player.player_message[guild_id] = await channel.send(self.Player.queue(guild_id))
         self.Saver.insert({guild_id: {
