@@ -16,11 +16,11 @@ class AbstractSaver(ABC):
 
 class AbstractFileObject(ABC):
     @abstractmethod
-    def get(self, attr: str):
+    def get(self, attr=None):
         pass
 
     @abstractmethod
-    def insert(self, value):
+    def insert(self, value: dict):
         pass
 
     @abstractmethod
@@ -80,7 +80,7 @@ class FileObject(AbstractFileObject):
             except json.JSONDecodeError:
                 return {}
 
-    def delete(self, attr):
+    def delete(self, attr: str):
         attr = str(attr)
         with open(self._filepath, 'r+') as f:
             try:
