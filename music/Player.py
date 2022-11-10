@@ -34,20 +34,28 @@ class Player:
 
     def queue(self, guild_id):
         i = 1
-        response = ""
+        to_play_list = []
+        played_list = []
         if general_playlist := self.Player.general_playlist.get(guild_id):
             for song in general_playlist:
-                response += f"*№{i} - {song['title']}*\n"
+                played_list.append(f"*№{i} - {song['title']}*\n")
                 i += 1
-
+            to_play_list.append(played_list[-1:][0])
+            played_list = played_list[:-1]
         if remaining_playlist := self.Player.remaining_playlist.get(guild_id):
-            # i = len(general_playlist) + 1
-            response += f"**№{i}** - **{remaining_playlist[0]['title']}**\n"
+            to_play_list.append(f"**№{i}** - **{remaining_playlist[0]['title']}**\n")
             for k in range(1, len(remaining_playlist)):
                 song = remaining_playlist[k]
-                response += f"№{k + i} - {song['title']}\n"
-        if not response:
+                to_play_list.append(f"№{k + i} - {song['title']}\n")
+        if (not to_play_list) and (not played_list):
             response = "Playlist are empty"
+        else:
+            response = ''
+            if to_play_list:
+                response += ''.join(x for x in to_play_list)
+            if played_list:
+                response += f"{'-' * 48}\n"
+                response += ''.join(x for x in played_list)
         return response
 
     async def update_queue_message(self, guild_id, message=None):
@@ -105,16 +113,22 @@ class Player:
             voice_client.resume()
 
         else:
-            await self.update_queue_message(guild_id, message="Bot isn't connected")
+            await self.update_queue_message(guild_id, message="**Bot isn't connected**")
 
     async def _check_voice(self, ctx):
         voice = ctx.user.voice
         if voice:
             return voice
-        await self.update_queue_message(ctx.guild.id, message="Join to voice channel and then summon me")
+        await self.update_queue_message(ctx.guild.id, message="**Join to voice channel and then summon me**")
 
     def _handle_song(self, song_info, guild_id):
-        song_titles = f"{str(song_info.get('artist'))} - {str(song_info.get('title'))}"
+        artist = song_info.get('artist')
+        title = song_info.get('title')
+        song_titles = ""
+        if artist:
+            song_titles += f"{str(artist)} - "
+        if title:
+            song_titles += f"{str(title)}"
         source_url = song_info['url']
         if not self.remaining_playlist.get(guild_id):
             self.remaining_playlist[guild_id] = []
@@ -134,7 +148,7 @@ class Player:
         if not user_voice or raw_url.isdigit():
             await _send_error_msg(ctx)
         guild_id = str(ctx.guild.id)
-        await self.update_queue_message(guild_id, message='Download started')
+        await self.update_queue_message(guild_id, message='**Download started**')
         await ctx.response.defer()
         if is_playlist:
             song_info = find_playlist(raw_url)
